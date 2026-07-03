@@ -22,6 +22,7 @@
     .sharebar { background:var(--bar-bg); border-radius:5px; height:9px; overflow:hidden; }
     .sharebar > span { display:block; height:100%; background:var(--bar); }
     .muted { color: var(--muted); }
+    .grouphead { font-size:16px; margin:28px 0 4px; }
   </style>
 </head>
 <body>
@@ -87,10 +88,21 @@
       const app = document.getElementById("app");
       try {
         const entries = await (await fetch(WORKER_URL)).json();
-        const sessions = summarize(entries, { limitUsd: SESSION_COST_LIMIT_USD, maxSessions: MAX_SESSIONS });
-        if (sessions.length === 0) { app.textContent = "No usage recorded yet."; return; }
+        // Split by tool: codex and Claude have separate sessions/limits, so
+        // summarize each on its own instead of merging cost into one 5h grid.
+        const groups = [
+          { label: "Claude Code", rows: entries.filter((e) => e && e.source !== "codex") },
+          { label: "Codex", rows: entries.filter((e) => e && e.source === "codex") },
+        ];
+        let html = "";
+        for (const g of groups) {
+          const sessions = summarize(g.rows, { limitUsd: SESSION_COST_LIMIT_USD, maxSessions: MAX_SESSIONS });
+          if (sessions.length === 0) continue;
+          html += `<h3 class="grouphead">${g.label}</h3>` + sessions.map(renderSession).join("");
+        }
+        if (!html) { app.textContent = "No usage recorded yet."; return; }
         app.className = "";
-        app.innerHTML = sessions.map(renderSession).join("");
+        app.innerHTML = html;
       } catch (e) {
         app.className = "muted";
         app.textContent = "Failed to load: " + e.message;
