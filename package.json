@@ -1,0 +1,27 @@
+{
+  "name": "usage-tracker",
+  "version": "1.0.0",
+  "description": "Tracks Claude Code / Codex usage across a team sharing one account.",
+  "main": "install.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/omerAJ/usage-tracker.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/omerAJ/usage-tracker/issues"
+  },
+  "homepage": "https://github.com/omerAJ/usage-tracker#readme",
+  "bin": {
+  "usage-tracker": "./install.js"
+  },
+  "type": "module"
+}
