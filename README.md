@@ -13,8 +13,14 @@ Tracks Claude Code / Codex usage across a team sharing one account.
   only if you know your plan's actual budget.
 
 ## Setup for teammates
-1. `npm install` inside `collector/`
-2. Add a `SessionEnd` hook in `~/.claude/settings.json` pointing to `collector/trigger.js`
-3. Check the dashboard: https://omer-aj.github.io/usage-tracker/
+Run:
+```sh
+npx github:omerAJ/usage-tracker
+```
+
+This installs the collector and wires up Claude Code / Codex hooks automatically.
+If you use Codex, open it once afterward and run `/hooks` to trust the new hook.
+
+Dashboard: https://omerAJ.github.io/usage-tracker/
 
 [Cloudlfare worker URL](https://usage-tracker-worker.omer-aj.workers.dev)
