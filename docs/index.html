@@ -2,50 +2,103 @@
 <html>
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Usage Tracker</title>
   <style>
-    body { font-family: sans-serif; max-width: 600px; margin: 40px auto; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { text-align: left; padding: 8px; border-bottom: 1px solid #ddd; }
-    th { background: #f5f5f5; }
+    :root { --line:#e5e7eb; --muted:#6b7280; --bar-bg:#eef1f6; --bar:#4c8bf5; --idle:#cbd5e1; --live:#16a34a; }
+    body { font-family: system-ui, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 16px; color:#111827; }
+    h1 { margin: 0 0 2px; font-size: 22px; }
+    .sub { color: var(--muted); margin: 0 0 20px; font-size: 14px; line-height:1.5; }
+    .session { border:1px solid var(--line); border-radius:12px; padding:14px 18px; margin:16px 0; }
+    .session h2 { font-size:15px; margin:0; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .live { font-size:11px; font-weight:600; color:var(--live); border:1px solid var(--live); border-radius:20px; padding:1px 8px; }
+    .cap { color:var(--muted); font-size:13px; margin:8px 0 4px; }
+    .capbar { background:var(--bar-bg); border-radius:6px; height:12px; overflow:hidden; margin-bottom:14px; }
+    .capbar > span { display:block; height:100%; background:var(--bar); }
+    table { width:100%; border-collapse:collapse; }
+    th, td { text-align:left; padding:7px 6px; font-size:14px; }
+    th { color:var(--muted); font-weight:600; border-bottom:1px solid var(--line); }
+    td.num, th.num { text-align:right; font-variant-numeric: tabular-nums; }
+    .sharebar { background:var(--bar-bg); border-radius:5px; height:9px; overflow:hidden; }
+    .sharebar > span { display:block; height:100%; background:var(--bar); }
+    .muted { color: var(--muted); }
   </style>
 </head>
 <body>
-  <h1>Last 5-hour window</h1>
-  <table id="board">
-    <thead><tr><th>User</th><th>Tokens</th></tr></thead>
-    <tbody id="rows"></tbody>
-  </table>
+  <h1>Team usage · shared 5-hour sessions</h1>
+  <p class="sub">
+    <b>Share</b> = of the money the account actually burned that session, how much was each person.
+    Measured in cost, not tokens, so Opus vs Sonnet is fair — this is who to point at when you're
+    both stuck waiting for a reset.<br>
+    <b>Capacity</b> = how full the session got vs the priciest session on record (our practical
+    ceiling; Claude doesn't publish a real limit). Times in GMT+5.
+  </p>
+  <div id="app" class="muted">Loading…</div>
 
-  <script>
+  <script type="module">
+    import { summarize } from "./logic.mjs";
+
     const WORKER_URL = "https://usage-tracker-worker.omer-aj.workers.dev/leaderboard";
+    const TIMEZONE = "Asia/Karachi";      // GMT+5 — same for every viewer
+    const SESSION_COST_LIMIT_USD = null;  // null = auto (priciest session). Set a $ number to pin your plan's real 5h budget.
+    const MAX_SESSIONS = 12;
+
+    const fmtInt = (n) => Math.round(n).toLocaleString("en-US");
+    const fmtPct = (f) => (f * 100).toFixed(f > 0 && f < 0.1 ? 1 : 0) + "%";
+    const fmtTime = (ms) =>
+      new Date(ms).toLocaleString("en-US", {
+        timeZone: TIMEZONE, month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+      });
+
+    function renderSession(s) {
+      const rows = s.users
+        .slice()
+        .sort((a, b) => b.cost - a.cost) // biggest burner (by $) first
+        .map((u) => `
+          <tr>
+            <td>${u.user}</td>
+            <td class="num">$${u.cost.toFixed(2)}</td>
+            <td class="num muted">${fmtInt(u.tokens)}</td>
+            <td class="num">${fmtPct(u.share)}</td>
+            <td style="width:38%"><div class="sharebar"><span style="width:${(u.share * 100).toFixed(1)}%"></span></div></td>
+          </tr>`).join("");
+
+      return `
+        <div class="session">
+          <h2>${fmtTime(s.start)} – ${fmtTime(s.end)}
+            ${s.active ? `<span class="live">live · resets ${fmtTime(s.end)}</span>` : ""}
+          </h2>
+          <div class="cap">
+            $${s.totalCost.toFixed(2)} combined · ${fmtInt(s.totalTokens)} tokens ·
+            <b>${fmtPct(s.capacityFrac)}</b> of capacity used, ${fmtPct(s.headroomFrac)} headroom
+          </div>
+          <div class="capbar"><span style="width:${Math.min(100, s.capacityFrac * 100).toFixed(1)}%"></span></div>
+          <table>
+            <thead><tr>
+              <th>User</th><th class="num">Cost</th><th class="num">Tokens</th>
+              <th class="num">Share</th><th></th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    }
 
     async function load() {
-      const res = await fetch(WORKER_URL);
-      const entries = await res.json();
-
-      // Keep only the last 5 hours, and sum tokens per user
-      const cutoff = Date.now() - 5 * 60 * 60 * 1000;
-      const totals = {};
-      for (const e of entries) {
-        if (new Date(e.timestamp).getTime() >= cutoff) {
-          totals[e.user] = (totals[e.user] || 0) + e.tokens;
-        }
+      const app = document.getElementById("app");
+      try {
+        const entries = await (await fetch(WORKER_URL)).json();
+        const sessions = summarize(entries, { limitUsd: SESSION_COST_LIMIT_USD, maxSessions: MAX_SESSIONS });
+        if (sessions.length === 0) { app.textContent = "No usage recorded yet."; return; }
+        app.className = "";
+        app.innerHTML = sessions.map(renderSession).join("");
+      } catch (e) {
+        app.className = "muted";
+        app.textContent = "Failed to load: " + e.message;
       }
-
-      const rows = document.getElementById("rows");
-      rows.innerHTML = "";
-      Object.entries(totals)
-        .sort((a, b) => b[1] - a[1]) // biggest usage first
-        .forEach(([user, tokens]) => {
-          const tr = document.createElement("tr");
-          tr.innerHTML = `<td>${user}</td><td>${tokens}</td>`;
-          rows.appendChild(tr);
-        });
     }
 
     load();
-    setInterval(load, 30000); // refresh every 30 seconds
+    setInterval(load, 30000);
   </script>
 </body>
 </html>

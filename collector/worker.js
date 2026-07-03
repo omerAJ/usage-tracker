@@ -3,18 +3,28 @@ import os from "os";
 
 const WORKER_URL = "https://usage-tracker-worker.omer-aj.workers.dev/log";
 
-function getCurrentBlockTokens() {
+// Newest real (non-gap) 5-hour block with its cumulative totals so far.
+// The server keys by blockId and overwrites, so reporting the same block on
+// every SessionEnd just refreshes its snapshot instead of double-counting.
+// ponytail: one block per run is enough — the server keeps the last snapshot of
+// every block we ever report, so full history builds up over time on its own.
+function latestBlock() {
   const raw = execSync("npx ccusage blocks --json", { encoding: "utf8" });
-  const data = JSON.parse(raw);
-  const activeBlock = data.blocks?.find((b) => b.isActive);
-  return activeBlock ? activeBlock.totalTokens : 0;
+  const blocks = (JSON.parse(raw).blocks || []).filter((b) => !b.isGap);
+  if (blocks.length === 0) return null;
+  return blocks.reduce((a, b) => (a.startTime > b.startTime ? a : b));
 }
 
 async function main() {
-  const tokens = getCurrentBlockTokens();
+  const b = latestBlock();
+  if (!b) return;
   const payload = {
     user: os.userInfo().username,
-    tokens,
+    blockId: b.id, // stable per 5-hour block → server overwrites, no dupes
+    startTime: b.startTime,
+    endTime: b.endTime,
+    tokens: b.totalTokens,
+    cost: b.costUSD,
     timestamp: new Date().toISOString(),
   };
   await fetch(WORKER_URL, {

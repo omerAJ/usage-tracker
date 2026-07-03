@@ -19,8 +19,11 @@ export default {
     if (request.method === "OPTIONS") return new Response(null, { headers: cors });
 
     if (url.pathname === "/log" && request.method === "POST") {
-      const data = await request.json(); // { user, tokens, timestamp }
-      const key = `${data.user}:${data.timestamp}`;
+      const data = await request.json(); // { user, blockId, startTime, endTime, tokens, cost }
+      // Key by user + 5-hour block so repeated reports of the same block
+      // overwrite (keep the latest cumulative snapshot) instead of stacking up
+      // and being double-counted. Falls back to timestamp for legacy payloads.
+      const key = `${data.user}:${data.blockId || data.timestamp}`;
       await env.USAGE_KV.put(key, JSON.stringify(data));
       return new Response("ok", { headers: cors });
     }
