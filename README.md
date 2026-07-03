@@ -1,3 +1,3 @@
 # usage-tracker
 
-URL: [text](https://usage-tracker-worker.omer-aj.workers.dev)
+URL: [https://usage-tracker-worker.omer-aj.workers.dev](https://usage-tracker-worker.omer-aj.workers.dev)
