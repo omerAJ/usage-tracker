@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Usage Tracker</title>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: 40px auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid #ddd; }
+    th { background: #f5f5f5; }
+  </style>
+</head>
+<body>
+  <h1>Last 5-hour window</h1>
+  <table id="board">
+    <thead><tr><th>User</th><th>Tokens</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <script>
+    const WORKER_URL = "https://usage-tracker-worker.omer-aj.workers.dev/leaderboard";
+
+    async function load() {
+      const res = await fetch(WORKER_URL);
+      const entries = await res.json();
+
+      // Keep only the last 5 hours, and sum tokens per user
+      const cutoff = Date.now() - 5 * 60 * 60 * 1000;
+      const totals = {};
+      for (const e of entries) {
+        if (new Date(e.timestamp).getTime() >= cutoff) {
+          totals[e.user] = (totals[e.user] || 0) + e.tokens;
+        }
+      }
+
+      const rows = document.getElementById("rows");
+      rows.innerHTML = "";
+      Object.entries(totals)
+        .sort((a, b) => b[1] - a[1]) // biggest usage first
+        .forEach(([user, tokens]) => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `<td>${user}</td><td>${tokens}</td>`;
+          rows.appendChild(tr);
+        });
+    }
+
+    load();
+    setInterval(load, 30000); // refresh every 30 seconds
+  </script>
+</body>
+</html>
