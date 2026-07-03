@@ -1,12 +1,22 @@
-/**
- * Welcome to Cloudflare Workers! This is your first worker.
- *
- * - Run `npm run dev` in your terminal to start a development server
- * - Open a browser tab at http://localhost:8787/ to see your worker in action
- * - Run `npm run deploy` to publish your worker
- *
- * Learn more at https://developers.cloudflare.com/workers/
- */
+const INDEX_KEY = "__usage_index__";
+
+async function getJson(kv, key, fallback) {
+  const value = await kv.get(key);
+  if (!value) return fallback;
+
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    console.warn(`Ignoring invalid JSON in KV key "${key}"`, error);
+    return fallback;
+  }
+}
+
+async function updateUsageIndex(kv, key, data) {
+  const index = await getJson(kv, INDEX_KEY, {});
+  index[key] = data;
+  await kv.put(INDEX_KEY, JSON.stringify(index));
+}
 
 export default {
   async fetch(request, env) {
@@ -25,14 +35,13 @@ export default {
       // and being double-counted. Falls back to timestamp for legacy payloads.
       const key = `${data.user}:${data.blockId || data.timestamp}`;
       await env.USAGE_KV.put(key, JSON.stringify(data));
+      await updateUsageIndex(env.USAGE_KV, key, data);
       return new Response("ok", { headers: cors });
     }
 
     if (url.pathname === "/leaderboard" && request.method === "GET") {
-      const list = await env.USAGE_KV.list();
-      const entries = await Promise.all(
-        list.keys.map(async (k) => JSON.parse(await env.USAGE_KV.get(k.name)))
-      );
+      const index = await getJson(env.USAGE_KV, INDEX_KEY, {});
+      const entries = Array.isArray(index) ? index : Object.values(index);
       return new Response(JSON.stringify(entries), {
         headers: { ...cors, "Content-Type": "application/json" },
       });
